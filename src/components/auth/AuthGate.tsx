@@ -3,13 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  clearCachedData,
-  getLocalBackupSummary,
-  importLocalBackup,
-  reloadData,
-  supabase,
-} from "@/lib/store";
+import { clearCachedData, reloadData, supabase } from "@/lib/store";
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -22,8 +16,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
-  const [localBackup, setLocalBackup] = useState({ customers: 0, txns: 0, expenses: 0 });
-  const [importing, setImporting] = useState(false);
   const requestVersion = useRef(0);
 
   useEffect(() => {
@@ -42,7 +34,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
       if (!nextSession) {
         clearCachedData();
-        setLocalBackup({ customers: 0, txns: 0, expenses: 0 });
         setDataLoading(false);
         return;
       }
@@ -52,7 +43,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
       try {
         await reloadData();
         if (active && version === requestVersion.current) {
-          setLocalBackup(getLocalBackupSummary());
           setDataLoading(false);
         }
       } catch (err) {
@@ -116,7 +106,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
     try {
       await reloadData();
       if (version === requestVersion.current) {
-        setLocalBackup(getLocalBackupSummary());
         setDataLoading(false);
       }
     } catch (err) {
@@ -124,23 +113,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
         setDataError(err instanceof Error ? err.message : "Could not load account data");
         setDataLoading(false);
       }
-    }
-  }
-
-  async function migrateLocalBackup() {
-    if (!session) return;
-    setImporting(true);
-    setFormError("");
-    try {
-      const imported = await importLocalBackup();
-      setLocalBackup(getLocalBackupSummary());
-      setNotice(
-        `Imported ${imported.customers} companies, ${imported.txns} entries, and ${imported.expenses} expenses.`,
-      );
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : "Could not import browser data");
-    } finally {
-      setImporting(false);
     }
   }
 
@@ -172,40 +144,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (session) {
-    const localRecordCount = localBackup.customers + localBackup.txns + localBackup.expenses;
-    return (
-      <>
-        {localRecordCount > 0 && (
-          <div className="border-b border-amber-500/30 bg-amber-50 px-4 py-3 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
-            <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3">
-              <p className="text-sm">
-                This browser has {localBackup.customers} companies, {localBackup.txns} entries, and{" "}
-                {localBackup.expenses} expenses saved locally.
-              </p>
-              <Button
-                type="button"
-                size="sm"
-                disabled={importing}
-                onClick={() => void migrateLocalBackup()}
-              >
-                {importing ? "Importing…" : "Import local data"}
-              </Button>
-            </div>
-          </div>
-        )}
-        {(notice || formError) && (
-          <p
-            role={formError ? "alert" : "status"}
-            className={`px-4 py-2 text-sm ${formError ? "bg-destructive/10 text-destructive" : "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200"}`}
-          >
-            {formError || notice}
-          </p>
-        )}
-        {children}
-      </>
-    );
-  }
+  if (session) return children;
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
