@@ -49,7 +49,7 @@ export function DeliveryForm({
   const amount = cansIn * rate;
   const payment = Math.max(0, Math.floor(Number(payNow || 0)));
 
-  function save() {
+  async function save() {
     if (!customerId) {
       toast.error("Select a company first");
       return;
@@ -67,20 +67,31 @@ export function DeliveryForm({
 
     const createdAt = Date.now();
 
-    if (cansIn > 0 || cansOut > 0) {
-      addTxn({
-        customerId,
-        date,
-        type: "delivery",
-        cans: cansIn,
-        ...(cansOut > 0 ? { cansReturned: cansOut } : {}),
-        rate,
-        amount,
-        createdAt,
-      });
-    }
-    if (payment > 0) {
-      addTxn({ customerId, date, type: "payment", amount: payment, createdAt });
+    let deliverySaved = false;
+    try {
+      if (cansIn > 0 || cansOut > 0) {
+        await addTxn({
+          customerId,
+          date,
+          type: "delivery",
+          cans: cansIn,
+          ...(cansOut > 0 ? { cansReturned: cansOut } : {}),
+          rate,
+          amount,
+          createdAt,
+        });
+        deliverySaved = true;
+      }
+      if (payment > 0) {
+        await addTxn({ customerId, date, type: "payment", amount: payment, createdAt });
+      }
+    } catch (err) {
+      toast.error(
+        deliverySaved
+          ? "Delivery saved, but payment failed. Check the ledger before retrying."
+          : err instanceof Error ? `Save failed: ${err.message}` : "Save failed. Check your connection.",
+      );
+      return;
     }
 
     const messages: string[] = [];

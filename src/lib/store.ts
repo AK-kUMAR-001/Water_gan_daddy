@@ -41,8 +41,8 @@ export const RATES = [25, 30, 35, 40, 45, 50];
 
 const KEY = "water-can-accounts-v1";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env["VITE_SUPABASE_URL"];
+const supabaseAnonKey = import.meta.env["VITE_SUPABASE_ANON_KEY"];
 
 export const supabase =
   supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
@@ -63,14 +63,23 @@ let data: Data = {
 };
 
 let loaded = false;
+let dataGeneration = 0;
 const listeners = new Set<() => void>();
 
-async function readSupabaseData(): Promise<Data> {
+async function currentOwnerId(): Promise<string> {
+  if (!supabase) throw new Error("Supabase is not configured");
+  const { data: sessionData, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  if (!sessionData.session) throw new Error("Sign in before accessing account data");
+  return sessionData.session.user.id;
+}
+
+async function readSupabaseData(ownerId: string): Promise<Data> {
   if (!supabase) return data;
   const [customersRes, txnsRes, expensesRes] = await Promise.all([
-    supabase.from("customers").select("*").order("name", { ascending: true }),
-    supabase.from("transactions").select("*").order("date", { ascending: true }),
-    supabase.from("expenses").select("*").order("date", { ascending: true }),
+    supabase.from("customers").select("*").eq("owner_id", ownerId).order("name", { ascending: true }),
+    supabase.from("transactions").select("*").eq("owner_id", ownerId).order("date", { ascending: true }),
+    supabase.from("expenses").select("*").eq("owner_id", ownerId).order("date", { ascending: true }),
   ]);
 
   if (customersRes.error) throw customersRes.error;
@@ -118,24 +127,161 @@ async function readSupabaseData(): Promise<Data> {
   };
 }
 
-async function persistToSupabase() {
+async function upsertSupabaseRow(
+  table: "customers" | "transactions" | "expenses",
+  row: Record<string, unknown>,
+) {
   if (!supabase) return;
-  const results = await Promise.all([
-    supabase.from("customers").upsert(
-      data.customers.map((c) => ({ ...c })),
-      { onConflict: "id" },
+  const ownerId = await currentOwnerId();
+  await upsertSupabaseRows(table, [row], ownerId);
+}
+
+async function upsertSupabaseRows(
+  table: "customers" | "transactions" | "expenses",
+  rows: Record<string, unknown>[],
+  ownerId: string,
+) {
+  if (!supabase) return;
+  for (let offset = 0; offset < rows.length; offset += 100) {
+    const batch = rows.slice(offset, offset + 100).map((row) => ({ ...row, owner_id: ownerId }));
+    const { error } = await supabase.from(table).upsert(batch, { onConflict: "id" });
+    if (error) throw error;
+  }
+}
+
+async function deleteSupabaseRow(table: "transactions" | "expenses", id: string) {
+  if (!supabase) return;
+  const ownerId = await currentOwnerId();
+  const { error } = await supabase.from(table).delete().eq("id", id).eq("owner_id", ownerId);
+  if (error) throw error;
+}
+
+function publishData(nextData: Data) {
+  data = nextData;
+  if (typeof window !== "undefined" && !supabase) {
+    window.localStorage.setItem(KEY, JSON.stringify(data));
+  }
+  listeners.forEach((listener) => listener());
+}
+
+function readLocalBackup(): Data {
+  if (typeof window === "undefined") return { customers: [], txns: [], expenses: [] };
+  try {
+    const raw = window.localStorage.getItem(KEY);
+    if (!raw) return { customers: [], txns: [], expenses: [] };
+    const parsed = JSON.parse(raw) as Partial<Data>;
+    return {
+      customers: Array.isArray(parsed.customers) ? parsed.customers : [],
+      txns: Array.isArray(parsed.txns) ? parsed.txns : [],
+      expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
+    };
+  } catch {
+    return { customers: [], txns: [], expenses: [] };
+  }
+}
+
+export function getLocalBackupSummary(ownerId: string) {
+  if (typeof window === "undefined") return { customers: 0, txns: 0, expenses: 0 };
+  if (window.localStorage.getItem(`${KEY}-imported-${ownerId}`) === "true") {
+    return { customers: 0, txns: 0, expenses: 0 };
+  }
+  const backup = readLocalBackup();
+  return {
+    customers: backup.customers.length,
+    txns: backup.txns.length,
+    expenses: backup.expenses.length,
+  };
+}
+
+export async function importLocalBackup() {
+  if (!supabase || typeof window === "undefined") throw new Error("Supabase is not available");
+  const ownerId = await currentOwnerId();
+  const backup = readLocalBackup();
+  const remote = await readSupabaseData(ownerId);
+  const customerIdMap = new Map<string, string>();
+  const customersToInsert: Customer[] = [];
+
+  for (const oldCustomer of backup.customers) {
+    const existing = [...remote.customers, ...customersToInsert].find(
+      (customer) =>
+        customer.id === oldCustomer.id ||
+        customer.name.trim().toLowerCase() === oldCustomer.name.trim().toLowerCase(),
+    );
+    const customerId = existing?.id ?? uid();
+    customerIdMap.set(oldCustomer.id, customerId);
+    if (!existing) {
+      customersToInsert.push({ ...oldCustomer, id: customerId });
+    }
+  }
+
+  const existingTxnIds = new Set(remote.txns.map((txn) => txn.id));
+  const txnSignatures = new Set(
+    remote.txns.map((txn) =>
+      JSON.stringify([
+        txn.customerId, txn.date, txn.type, txn.createdAt, txn.amount,
+        txn.cans ?? null, txn.cansReturned ?? null, txn.rate ?? null,
+      ]),
     ),
-    supabase.from("transactions").upsert(
-      data.txns.map((t) => ({ ...t })),
-      { onConflict: "id" },
-    ),
-    supabase.from("expenses").upsert(
-      data.expenses.map((e) => ({ ...e })),
-      { onConflict: "id" },
-    ),
-  ]);
-  const failedResult = results.find((result) => result.error);
-  if (failedResult?.error) throw failedResult.error;
+  );
+  const txnsToInsert: Txn[] = [];
+
+  for (const oldTxn of backup.txns) {
+    const customerId = customerIdMap.get(oldTxn.customerId);
+    if (!customerId) {
+      throw new Error("A saved transaction refers to a missing local customer; no data was imported.");
+    }
+    const signature = JSON.stringify([
+      customerId, oldTxn.date, oldTxn.type, oldTxn.createdAt, oldTxn.amount,
+      oldTxn.cans ?? null, oldTxn.cansReturned ?? null, oldTxn.rate ?? null,
+    ]);
+    if (existingTxnIds.has(oldTxn.id) || txnSignatures.has(signature)) continue;
+    const txn = {
+      ...oldTxn,
+      id: uid(),
+      customerId,
+    };
+    txnsToInsert.push(txn);
+    existingTxnIds.add(txn.id);
+    txnSignatures.add(signature);
+  }
+
+  const existingExpenseDates = new Set(remote.expenses.map((expense) => expense.date));
+  const expensesToInsert: Expense[] = [];
+  for (const oldExpense of backup.expenses) {
+    if (existingExpenseDates.has(oldExpense.date)) continue;
+    existingExpenseDates.add(oldExpense.date);
+    expensesToInsert.push({ ...oldExpense, id: uid() });
+  }
+
+  await upsertSupabaseRows("customers", customersToInsert, ownerId);
+  await upsertSupabaseRows("transactions", txnsToInsert, ownerId);
+  await upsertSupabaseRows("expenses", expensesToInsert, ownerId);
+  await reloadData();
+  window.localStorage.setItem(`${KEY}-imported-${ownerId}`, "true");
+
+  return {
+    customers: customersToInsert.length,
+    txns: txnsToInsert.length,
+    expenses: expensesToInsert.length,
+  };
+}
+
+export async function reloadData() {
+  if (!supabase) throw new Error("Supabase is not configured");
+  const generation = dataGeneration;
+  const ownerId = await currentOwnerId();
+  const freshData = await readSupabaseData(ownerId);
+  if (generation !== dataGeneration) return;
+  data = freshData;
+  loaded = true;
+  listeners.forEach((listener) => listener());
+}
+
+export function clearCachedData() {
+  dataGeneration += 1;
+  data = { customers: [], txns: [], expenses: [] };
+  loaded = false;
+  listeners.forEach((listener) => listener());
 }
 
 function load() {
@@ -143,29 +289,18 @@ function load() {
   loaded = true;
 
   if (supabase) {
-    readSupabaseData()
+    const generation = dataGeneration;
+    currentOwnerId()
+      .then((ownerId) => readSupabaseData(ownerId))
       .then((freshData) => {
+        if (generation !== dataGeneration) return;
         data = freshData;
         listeners.forEach((l) => l());
       })
       .catch((err) => {
-        console.error("Supabase load failed, using local fallback:", err);
-        try {
-          const raw = window.localStorage.getItem(KEY);
-          if (raw) {
-            const parsed = JSON.parse(raw) as Partial<Data>;
-            data = {
-              customers: parsed.customers ?? [],
-              txns: parsed.txns ?? [],
-              expenses: parsed.expenses ?? [],
-            };
-          } else {
-            data = { customers: [], txns: [], expenses: [] };
-            window.localStorage.setItem(KEY, JSON.stringify(data));
-          }
-        } catch {
-          data = { customers: [], txns: [], expenses: [] };
-        }
+        if (generation !== dataGeneration) return;
+        console.error("Supabase load failed:", err);
+        data = { customers: [], txns: [], expenses: [] };
         listeners.forEach((l) => l());
       });
     return;
@@ -187,20 +322,6 @@ function load() {
   } catch {
     data = { customers: [], txns: [], expenses: [] };
   }
-}
-
-async function persist() {
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(KEY, JSON.stringify(data));
-  }
-
-  try {
-    await persistToSupabase();
-  } catch (err) {
-    console.error("Supabase write failed:", err);
-  }
-
-  listeners.forEach((l) => l());
 }
 
 function subscribe(cb: () => void) {
@@ -232,57 +353,63 @@ export function useData(): Data {
 
 const uid = () => crypto.randomUUID();
 
-export function addCustomer(c: Omit<Customer, "id">) {
+export async function addCustomer(c: Omit<Customer, "id">) {
   load();
-  data = { ...data, customers: [...data.customers, { ...c, id: uid() }] };
-  persist();
+  const customer = { ...c, id: uid() };
+  await upsertSupabaseRow("customers", customer);
+  publishData({ ...data, customers: [...data.customers, customer] });
 }
 
-export function updateCustomer(id: string, patch: Partial<Customer>) {
+export async function updateCustomer(id: string, patch: Partial<Customer>) {
   load();
-  data = {
-    ...data,
-    customers: data.customers.map((c) => (c.id === id ? { ...c, ...patch } : c)),
-  };
-  persist();
+  const current = data.customers.find((customer) => customer.id === id);
+  if (!current) throw new Error("Customer was not found");
+  const customer = { ...current, ...patch, id };
+  await upsertSupabaseRow("customers", customer);
+  publishData({ ...data, customers: data.customers.map((item) => item.id === id ? customer : item) });
 }
 
-export function addTxn(t: Omit<Txn, "id" | "createdAt"> & { createdAt?: number }) {
+export async function addTxn(t: Omit<Txn, "id" | "createdAt"> & { createdAt?: number }) {
   load();
-  data = { ...data, txns: [...data.txns, { ...t, id: uid(), createdAt: t.createdAt ?? Date.now() }] };
-  persist();
+  const txn = { ...t, id: uid(), createdAt: t.createdAt ?? Date.now() };
+  await upsertSupabaseRow("transactions", txn);
+  publishData({ ...data, txns: [...data.txns, txn] });
 }
 
-export function updateTxn(id: string, patch: Partial<Txn>) {
+export async function updateTxn(id: string, patch: Partial<Txn>) {
   load();
-  data = { ...data, txns: data.txns.map((t) => (t.id === id ? { ...t, ...patch } : t)) };
-  persist();
+  const current = data.txns.find((txn) => txn.id === id);
+  if (!current) throw new Error("Transaction was not found");
+  const txn = { ...current, ...patch, id };
+  await upsertSupabaseRow("transactions", txn);
+  publishData({ ...data, txns: data.txns.map((item) => item.id === id ? txn : item) });
 }
 
-export function deleteTxn(id: string) {
+export async function deleteTxn(id: string) {
   load();
-  data = { ...data, txns: data.txns.filter((t) => t.id !== id) };
-  persist();
+  await deleteSupabaseRow("transactions", id);
+  publishData({ ...data, txns: data.txns.filter((txn) => txn.id !== id) });
 }
 
-export function upsertExpense(expense: Omit<Expense, "id" | "createdAt">) {
+export async function upsertExpense(expense: Omit<Expense, "id" | "createdAt">) {
   load();
   const existing = data.expenses.find((item) => item.date === expense.date);
-  data = {
+  const savedExpense = existing
+    ? { ...existing, ...expense, createdAt: Date.now() }
+    : { ...expense, id: uid(), createdAt: Date.now() };
+  await upsertSupabaseRow("expenses", savedExpense);
+  publishData({
     ...data,
     expenses: existing
-      ? data.expenses.map((item) =>
-          item.id === existing.id ? { ...item, ...expense, createdAt: Date.now() } : item,
-        )
-      : [...data.expenses, { ...expense, id: uid(), createdAt: Date.now() }],
-  };
-  persist();
+      ? data.expenses.map((item) => item.id === existing.id ? savedExpense : item)
+      : [...data.expenses, savedExpense],
+  });
 }
 
-export function deleteExpense(id: string) {
+export async function deleteExpense(id: string) {
   load();
-  data = { ...data, expenses: data.expenses.filter((expense) => expense.id !== id) };
-  persist();
+  await deleteSupabaseRow("expenses", id);
+  publishData({ ...data, expenses: data.expenses.filter((expense) => expense.id !== id) });
 }
 
 /* ---------- derived helpers (pure) ---------- */

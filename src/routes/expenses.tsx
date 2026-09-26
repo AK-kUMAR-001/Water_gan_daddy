@@ -80,7 +80,7 @@ function ExpensesPage() {
     );
   }, [expenses]);
 
-  function save() {
+  async function save() {
     const dieselAmt = Math.max(0, Math.floor(Number(diesel || 0)));
     const foodAmt = Math.max(0, Math.floor(Number(snacksFood || 0)));
     const repairsAmt = Math.max(0, Math.floor(Number(serviceRepairs || 0)));
@@ -98,7 +98,12 @@ function ExpensesPage() {
     };
     const trimmed = serviceNotes.trim();
     if (trimmed) exp["serviceNotes"] = trimmed;
-    upsertExpense(exp);
+    try {
+      await upsertExpense(exp);
+    } catch (err) {
+      toast.error(err instanceof Error ? `Expense save failed: ${err.message}` : "Expense save failed.");
+      return;
+    }
     toast.success(`Expenses saved for ${date}`);
   }
 
@@ -292,8 +297,13 @@ function ExpensesPage() {
                     type="button"
                     variant="ghost"
                     className="h-8 text-destructive hover:text-destructive"
-                    onClick={() => {
-                      deleteExpense(expense.id);
+                    onClick={async () => {
+                      try {
+                        await deleteExpense(expense.id);
+                      } catch (err) {
+                        toast.error(err instanceof Error ? `Delete failed: ${err.message}` : "Delete failed.");
+                        return;
+                      }
                       if (date === expense.date) {
                         setDiesel("");
                         setSnacksFood("");

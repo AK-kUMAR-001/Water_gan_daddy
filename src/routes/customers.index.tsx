@@ -45,7 +45,7 @@ function AddCustomerDialog() {
   const [openingCans, setOpeningCans] = useState("");
   const [notes, setNotes] = useState("");
 
-  function save() {
+  async function save() {
     const trimmed = name.trim();
     if (!trimmed) {
       toast.error("Enter a company name");
@@ -55,15 +55,20 @@ function AddCustomerDialog() {
       toast.error("This company already exists");
       return;
     }
-    addCustomer({
-      name: trimmed,
-      contact: contact.trim(),
-      phone: phone.trim(),
-      defaultRate: Number(rate),
-      openingPending: Math.max(0, Math.floor(Number(opening || 0))),
-      openingCans: Math.max(0, Math.floor(Number(openingCans || 0))),
-      notes: notes.trim(),
-    });
+    try {
+      await addCustomer({
+        name: trimmed,
+        contact: contact.trim(),
+        phone: phone.trim(),
+        defaultRate: Number(rate),
+        openingPending: Math.max(0, Math.floor(Number(opening || 0))),
+        openingCans: Math.max(0, Math.floor(Number(openingCans || 0))),
+        notes: notes.trim(),
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? `Customer save failed: ${err.message}` : "Customer save failed.");
+      return;
+    }
     toast.success("Customer added");
     setName("");
     setContact("");

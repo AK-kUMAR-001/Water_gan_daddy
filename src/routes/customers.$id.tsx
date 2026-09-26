@@ -56,7 +56,7 @@ function EditTxnDialog({ txn, onClose }: { txn: Txn; onClose: () => void }) {
     txn.type === "delivery" ? txn.amount !== (txn.cans ?? 0) * (txn.rate ?? 0) : false,
   );
 
-  function save() {
+  async function save() {
     if (txn.type === "delivery") {
       const n = Math.max(0, Math.floor(Number(cans || 0)));
       const r = Number(rate);
@@ -90,10 +90,20 @@ function EditTxnDialog({ txn, onClose }: { txn: Txn; onClose: () => void }) {
       if (currentStock) {
         patch.currentStock = Math.max(0, Math.floor(Number(currentStock || 0)));
       }
-      updateTxn(txn.id, patch);
+      try {
+        await updateTxn(txn.id, patch);
+      } catch (err) {
+        toast.error(err instanceof Error ? `Update failed: ${err.message}` : "Update failed.");
+        return;
+      }
     } else {
       const a = Math.max(1, Math.floor(Number(amount || 0)));
-      updateTxn(txn.id, { date, amount: a });
+      try {
+        await updateTxn(txn.id, { date, amount: a });
+      } catch (err) {
+        toast.error(err instanceof Error ? `Update failed: ${err.message}` : "Update failed.");
+        return;
+      }
     }
     toast.success("Transaction updated");
     onClose();
@@ -247,8 +257,13 @@ function EditTxnDialog({ txn, onClose }: { txn: Txn; onClose: () => void }) {
             <Button
               variant="outline"
               className="h-11"
-              onClick={() => {
-                deleteTxn(txn.id);
+              onClick={async () => {
+                try {
+                  await deleteTxn(txn.id);
+                } catch (err) {
+                  toast.error(err instanceof Error ? `Delete failed: ${err.message}` : "Delete failed.");
+                  return;
+                }
                 toast.success("Transaction deleted");
                 onClose();
               }}

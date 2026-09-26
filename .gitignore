@@ -16,6 +16,7 @@ dist-ssr
 .tanstack/**
 .nitro
 *.local
+supabase pass database.txt
 
 # Wrangler / Cloudflare
 .wrangler/

@@ -10,7 +10,9 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import { AppNav } from "@/components/AppNav";
+import { AuthGate } from "@/components/auth/AuthGate";
 import { Toaster } from "@/components/ui/sonner";
+import { supabase } from "@/lib/store";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 
@@ -124,9 +126,11 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AppNav />
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <AuthGate>
+        <AppNav onSignOut={() => void supabase?.auth.signOut()} />
+        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+        <Outlet />
+      </AuthGate>
       <Toaster />
     </QueryClientProvider>
   );

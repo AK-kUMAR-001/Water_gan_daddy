@@ -28,7 +28,7 @@ export function PaymentForm({
   const currentCans = customer ? cansWith(data, customer.id) : 0;
   const amount = Math.max(0, Math.floor(Number(amountText || 0)));
 
-  function save() {
+  async function save() {
     if (!customerId) {
       toast.error("Select a company first");
       return;
@@ -37,7 +37,12 @@ export function PaymentForm({
       toast.error("Enter a payment amount");
       return;
     }
-    addTxn({ customerId, date, type: "payment", amount });
+    try {
+      await addTxn({ customerId, date, type: "payment", amount });
+    } catch (err) {
+      toast.error(err instanceof Error ? `Payment failed: ${err.message}` : "Payment failed. Check your connection.");
+      return;
+    }
     toast.success(`Payment ${rupees(amount)} recorded`);
     setAmountText("");
     if (!lockedCustomerId) setCustomerId(null);
