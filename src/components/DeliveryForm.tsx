@@ -64,6 +64,9 @@ export function DeliveryForm({
       );
       return;
     }
+
+    const createdAt = Date.now();
+
     if (cansIn > 0 || cansOut > 0) {
       addTxn({
         customerId,
@@ -73,10 +76,11 @@ export function DeliveryForm({
         ...(cansOut > 0 ? { cansReturned: cansOut } : {}),
         rate,
         amount,
+        createdAt,
       });
     }
     if (payment > 0) {
-      addTxn({ customerId, date, type: "payment", amount: payment });
+      addTxn({ customerId, date, type: "payment", amount: payment, createdAt });
     }
 
     const messages: string[] = [];
@@ -106,6 +110,7 @@ export function DeliveryForm({
   };
   const pairedIds = new Set<string>();
   const mergedRows: MergedRow[] = [];
+
   for (const t of todayTxnsRaw) {
     if (pairedIds.has(t.id)) continue;
     if (t.type === "delivery") {
@@ -114,6 +119,7 @@ export function DeliveryForm({
           p.type === "payment" &&
           !pairedIds.has(p.id) &&
           p.customerId === t.customerId &&
+          p.date === t.date &&
           p.createdAt === t.createdAt,
       );
       if (pair) {
@@ -121,7 +127,7 @@ export function DeliveryForm({
         pairedIds.add(pair.id);
         mergedRows.push({
           key: `${t.id}|${pair.id}`,
-          sortAt: Math.max(t.createdAt, pair.createdAt),
+          sortAt: t.createdAt,
           customerId: t.customerId,
           kind: "mixed",
           delivery: t,
@@ -143,6 +149,7 @@ export function DeliveryForm({
           p.type === "delivery" &&
           !pairedIds.has(p.id) &&
           p.customerId === t.customerId &&
+          p.date === t.date &&
           p.createdAt === t.createdAt,
       );
       if (!pair) {
@@ -157,6 +164,8 @@ export function DeliveryForm({
       }
     }
   }
+
+  mergedRows.sort((a, b) => b.sortAt - a.sortAt);
   mergedRows.sort((a, b) => b.sortAt - a.sortAt);
 
   return (

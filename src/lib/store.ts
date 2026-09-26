@@ -1,3 +1,4 @@
+import { createClient } from "@supabase/supabase-js";
 import { useEffect, useState, useSyncExternalStore } from "react";
 
 export type Customer = {
@@ -40,6 +41,12 @@ export const RATES = [25, 30, 35, 40, 45, 50];
 
 const KEY = "water-can-accounts-v1";
 
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+export const supabase =
+  supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
+
 export const getDateStr = (daysAgo: number) => {
   const d = new Date();
   d.setDate(d.getDate() - daysAgo);
@@ -49,205 +56,150 @@ export const getDateStr = (daysAgo: number) => {
   return `${year}-${month}-${day}`;
 };
 
-export const seedCustomers: Customer[] = [
-  ["Sri Lakshmi Hotel", "Ramesh", "98400 12345", 30, 2450, 12],
-  ["Sri Vinayaga Stores", "Karthik", "98401 22345", 25, 0, 5],
-  ["Sri Sakthi Traders", "Murali", "98402 33456", 35, 800, 8],
-  ["Sri Murugan Mess", "Selvam", "98403 44567", 30, 350, 4],
-  ["ABC Hotel", "Anand", "98404 55678", 30, 1200, 15],
-  ["Green Leaf Cafe", "Divya", "98405 66789", 40, 0, 6],
-  ["Annapoorna Caterers", "Suresh", "98406 77890", 30, 1500, 10],
-  ["Taj Tea Stall", "Ismail", "98407 88901", 25, 250, 3],
-  ["Blue Star Residency", "Prakash", "98408 99012", 35, 2100, 14],
-  ["Kavitha Bakery", "Kavitha", "98409 00123", 30, 0, 5],
-].map(([name, contact, phone, defaultRate, openingPending, openingCans], i) => ({
-  id: `seed-${i + 1}`,
-  name: name as string,
-  contact: contact as string,
-  phone: phone as string,
-  defaultRate: defaultRate as number,
-  openingPending: openingPending as number,
-  openingCans: openingCans as number,
-}));
-
-export function getSeedTxns(): Txn[] {
-  const days = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0];
-
-  const deliveryPlan: Record<string, { baseCans: number[]; returnOffset: number[] }> = {
-    "seed-1": { baseCans: [10, 12, 14, 11, 13, 15, 12, 11, 14, 12], returnOffset: [2, 1, 2, 1, 2, 2, 1, 1, 2, 2] },
-    "seed-2": { baseCans: [8, 7, 9, 8, 7, 10, 8, 8, 9, 8], returnOffset: [1, 1, 2, 1, 0, 2, 1, 1, 1, 1] },
-    "seed-3": { baseCans: [12, 15, 14, 13, 16, 14, 15, 13, 15, 14], returnOffset: [2, 2, 1, 2, 2, 1, 2, 1, 2, 2] },
-    "seed-4": { baseCans: [6, 5, 7, 6, 5, 8, 6, 7, 6, 8], returnOffset: [1, 1, 1, 1, 0, 2, 1, 1, 1, 1] },
-    "seed-5": { baseCans: [16, 20, 18, 17, 19, 22, 18, 17, 20, 18], returnOffset: [3, 2, 2, 2, 3, 3, 2, 2, 3, 2] },
-    "seed-6": { baseCans: [8, 10, 12, 9, 11, 10, 12, 9, 10, 11], returnOffset: [1, 2, 2, 1, 2, 1, 2, 1, 1, 2] },
-    "seed-7": { baseCans: [14, 16, 15, 18, 14, 16, 15, 17, 14, 16], returnOffset: [2, 2, 2, 3, 1, 2, 2, 2, 2, 2] },
-    "seed-8": { baseCans: [10, 12, 11, 10, 13, 11, 12, 10, 11, 12], returnOffset: [1, 2, 1, 1, 2, 1, 2, 1, 1, 2] },
-    "seed-9": { baseCans: [15, 18, 16, 17, 20, 16, 18, 15, 17, 19], returnOffset: [2, 3, 2, 2, 3, 2, 3, 2, 2, 3] },
-    "seed-10": { baseCans: [6, 8, 7, 6, 9, 7, 8, 6, 7, 8], returnOffset: [1, 1, 1, 1, 2, 1, 1, 1, 1, 1] },
-  };
-
-  const paymentsPlan = [
-    { customerId: "seed-1", daysAgo: 6, amount: 2500 },
-    { customerId: "seed-1", daysAgo: 1, amount: 1500 },
-    { customerId: "seed-2", daysAgo: 7, amount: 1200 },
-    { customerId: "seed-2", daysAgo: 2, amount: 1000 },
-    { customerId: "seed-3", daysAgo: 5, amount: 2800 },
-    { customerId: "seed-3", daysAgo: 1, amount: 2000 },
-    { customerId: "seed-4", daysAgo: 8, amount: 1000 },
-    { customerId: "seed-4", daysAgo: 3, amount: 1200 },
-    { customerId: "seed-5", daysAgo: 6, amount: 3500 },
-    { customerId: "seed-5", daysAgo: 1, amount: 2800 },
-    { customerId: "seed-6", daysAgo: 7, amount: 2400 },
-    { customerId: "seed-6", daysAgo: 0, amount: 1600 },
-    { customerId: "seed-7", daysAgo: 5, amount: 3000 },
-    { customerId: "seed-7", daysAgo: 2, amount: 2500 },
-    { customerId: "seed-8", daysAgo: 6, amount: 1800 },
-    { customerId: "seed-8", daysAgo: 1, amount: 1500 },
-    { customerId: "seed-9", daysAgo: 4, amount: 3500 },
-    { customerId: "seed-9", daysAgo: 0, amount: 3000 },
-    { customerId: "seed-10", daysAgo: 5, amount: 1200 },
-    { customerId: "seed-10", daysAgo: 1, amount: 1000 },
-  ];
-
-  const list: Txn[] = [];
-  let txnId = 1;
-
-  days.forEach((dayAgo, dayIdx) => {
-    const dateStr = getDateStr(dayAgo);
-
-    seedCustomers.forEach((cust, custIdx) => {
-      const plan = deliveryPlan[cust.id];
-      const cans = plan?.baseCans[dayIdx] ?? 10;
-      const returned = Math.max(0, cans - (plan?.returnOffset[dayIdx] ?? 1));
-      const rate = cust.defaultRate;
-      const amount = cans * rate;
-      const hour = 7 + Math.floor(custIdx / 3);
-      const min = (custIdx % 3) * 20;
-      const createdAt = new Date(`${dateStr}T${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}:00`).getTime();
-
-      list.push({
-        id: `seed-del-${txnId++}`,
-        customerId: cust.id,
-        date: dateStr,
-        type: "delivery",
-        cans,
-        cansReturned: returned,
-        rate,
-        amount,
-        createdAt,
-      });
-    });
-  });
-
-  paymentsPlan.forEach((p, pIdx) => {
-    const dateStr = getDateStr(p.daysAgo);
-    const hour = p.daysAgo === 0 ? 9 + (pIdx % 4) : 10 + (pIdx % 4);
-    const minute = (pIdx * 7) % 60;
-    const createdAt = new Date(
-      `${dateStr}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`,
-    ).getTime();
-    list.push({
-      id: `seed-pay-${pIdx + 1}`,
-      customerId: p.customerId,
-      date: dateStr,
-      type: "payment",
-      amount: p.amount,
-      createdAt,
-    });
-  });
-
-  return list;
-}
-
-export function getSeedExpenses(): Expense[] {
-  const d9 = getDateStr(9);
-  const d8 = getDateStr(8);
-  const d7 = getDateStr(7);
-  const d6 = getDateStr(6);
-  const d5 = getDateStr(5);
-  const d4 = getDateStr(4);
-  const d3 = getDateStr(3);
-  const d2 = getDateStr(2);
-  const d1 = getDateStr(1);
-  const d0 = getDateStr(0);
-
-  const t = (dateStr: string, hour = 18) =>
-    new Date(`${dateStr}T${String(hour).padStart(2, "0")}:00:00`).getTime();
-
-  return [
-    { id: "seed-exp-1", date: d9, diesel: 450, snacksFood: 120, serviceRepairs: 0, createdAt: t(d9) },
-    { id: "seed-exp-2", date: d8, diesel: 500, snacksFood: 150, serviceRepairs: 0, createdAt: t(d8) },
-    { id: "seed-exp-3", date: d7, diesel: 400, snacksFood: 110, serviceRepairs: 0, createdAt: t(d7) },
-    { id: "seed-exp-4", date: d6, diesel: 550, snacksFood: 140, serviceRepairs: 450, createdAt: t(d6) },
-    { id: "seed-exp-5", date: d5, diesel: 500, snacksFood: 130, serviceRepairs: 0, createdAt: t(d5) },
-    { id: "seed-exp-6", date: d4, diesel: 600, snacksFood: 160, serviceRepairs: 0, createdAt: t(d4) },
-    { id: "seed-exp-7", date: d3, diesel: 450, snacksFood: 125, serviceRepairs: 0, createdAt: t(d3) },
-    { id: "seed-exp-8", date: d2, diesel: 500, snacksFood: 140, serviceRepairs: 800, createdAt: t(d2) },
-    { id: "seed-exp-9", date: d1, diesel: 450, snacksFood: 115, serviceRepairs: 0, createdAt: t(d1) },
-    { id: "seed-exp-10", date: d0, diesel: 500, snacksFood: 150, serviceRepairs: 0, createdAt: t(d0) },
-  ];
-}
-
 let data: Data = {
-  customers: seedCustomers,
-  txns: getSeedTxns(),
-  expenses: getSeedExpenses(),
+  customers: [],
+  txns: [],
+  expenses: [],
 };
 
 let loaded = false;
 const listeners = new Set<() => void>();
 
-export function resetToSampleData() {
-  data = {
-    customers: seedCustomers,
-    txns: getSeedTxns(),
-    expenses: getSeedExpenses(),
+async function readSupabaseData(): Promise<Data> {
+  if (!supabase) return data;
+  const [customersRes, txnsRes, expensesRes] = await Promise.all([
+    supabase.from("customers").select("*").order("name", { ascending: true }),
+    supabase.from("transactions").select("*").order("date", { ascending: true }),
+    supabase.from("expenses").select("*").order("date", { ascending: true }),
+  ]);
+
+  if (customersRes.error) throw customersRes.error;
+  if (txnsRes.error) throw txnsRes.error;
+  if (expensesRes.error) throw expensesRes.error;
+
+  const customers = (customersRes.data ?? []).map((c: any) => ({
+    id: c.id,
+    name: c.name,
+    contact: c.contact ?? "",
+    phone: c.phone ?? "",
+    defaultRate: Number(c.defaultRate ?? 0),
+    openingPending: Number(c.openingPending ?? 0),
+    openingCans: Number(c.openingCans ?? 0),
+    notes: c.notes ?? "",
+  }));
+
+  const txns = (txnsRes.data ?? []).map((t: any) => ({
+    id: t.id,
+    customerId: t.customerId,
+    date: t.date,
+    type: t.type,
+    cans: t.cans ?? undefined,
+    cansReturned: t.cansReturned ?? undefined,
+    currentStock: t.currentStock ?? undefined,
+    rate: t.rate ?? undefined,
+    amount: Number(t.amount ?? 0),
+    createdAt: Number(t.createdAt ?? Date.now()),
+  }));
+
+  const expenses = (expensesRes.data ?? []).map((e: any) => ({
+    id: e.id,
+    date: e.date,
+    diesel: Number(e.diesel ?? 0),
+    snacksFood: Number(e.snacksFood ?? 0),
+    serviceRepairs: Number(e.serviceRepairs ?? 0),
+    serviceNotes: e.serviceNotes ?? "",
+    createdAt: Number(e.createdAt ?? Date.now()),
+  }));
+
+  return {
+    customers,
+    txns,
+    expenses,
   };
-  persist();
 }
 
-export function clearAllData() {
-  data = {
-    customers: [],
-    txns: [],
-    expenses: [],
-  };
-  persist();
+async function persistToSupabase() {
+  if (!supabase) return;
+  const results = await Promise.all([
+    supabase.from("customers").upsert(
+      data.customers.map((c) => ({ ...c })),
+      { onConflict: "id" },
+    ),
+    supabase.from("transactions").upsert(
+      data.txns.map((t) => ({ ...t })),
+      { onConflict: "id" },
+    ),
+    supabase.from("expenses").upsert(
+      data.expenses.map((e) => ({ ...e })),
+      { onConflict: "id" },
+    ),
+  ]);
+  const failedResult = results.find((result) => result.error);
+  if (failedResult?.error) throw failedResult.error;
 }
 
 function load() {
   if (loaded || typeof window === "undefined") return;
   loaded = true;
+
+  if (supabase) {
+    readSupabaseData()
+      .then((freshData) => {
+        data = freshData;
+        listeners.forEach((l) => l());
+      })
+      .catch((err) => {
+        console.error("Supabase load failed, using local fallback:", err);
+        try {
+          const raw = window.localStorage.getItem(KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw) as Partial<Data>;
+            data = {
+              customers: parsed.customers ?? [],
+              txns: parsed.txns ?? [],
+              expenses: parsed.expenses ?? [],
+            };
+          } else {
+            data = { customers: [], txns: [], expenses: [] };
+            window.localStorage.setItem(KEY, JSON.stringify(data));
+          }
+        } catch {
+          data = { customers: [], txns: [], expenses: [] };
+        }
+        listeners.forEach((l) => l());
+      });
+    return;
+  }
+
   try {
     const raw = window.localStorage.getItem(KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<Data>;
-      const migratedCustomers = (parsed.customers ?? seedCustomers).map((c) => ({
-        ...c,
-        openingCans: c.openingCans ?? 0,
-      }));
       data = {
-        customers: migratedCustomers,
+        customers: parsed.customers ?? [],
         txns: parsed.txns ?? [],
         expenses: parsed.expenses ?? [],
       };
     } else {
-      data = {
-        customers: seedCustomers,
-        txns: getSeedTxns(),
-        expenses: getSeedExpenses(),
-      };
-      persist();
+      data = { customers: [], txns: [], expenses: [] };
+      window.localStorage.setItem(KEY, JSON.stringify(data));
     }
   } catch {
-    /* ignore */
+    data = { customers: [], txns: [], expenses: [] };
   }
 }
 
-function persist() {
+async function persist() {
   if (typeof window !== "undefined") {
     window.localStorage.setItem(KEY, JSON.stringify(data));
   }
+
+  try {
+    await persistToSupabase();
+  } catch (err) {
+    console.error("Supabase write failed:", err);
+  }
+
   listeners.forEach((l) => l());
 }
 
@@ -278,7 +230,7 @@ export function useData(): Data {
   );
 }
 
-const uid = () => Math.random().toString(36).slice(2, 10);
+const uid = () => crypto.randomUUID();
 
 export function addCustomer(c: Omit<Customer, "id">) {
   load();
@@ -295,9 +247,9 @@ export function updateCustomer(id: string, patch: Partial<Customer>) {
   persist();
 }
 
-export function addTxn(t: Omit<Txn, "id" | "createdAt">) {
+export function addTxn(t: Omit<Txn, "id" | "createdAt"> & { createdAt?: number }) {
   load();
-  data = { ...data, txns: [...data.txns, { ...t, id: uid(), createdAt: Date.now() }] };
+  data = { ...data, txns: [...data.txns, { ...t, id: uid(), createdAt: t.createdAt ?? Date.now() }] };
   persist();
 }
 
@@ -338,7 +290,6 @@ export function deleteExpense(id: string) {
 export function sortTxns(txns: Txn[]) {
   return [...txns].sort((a, b) => {
     if (a.date !== b.date) return a.date < b.date ? -1 : 1;
-    if (a.type !== b.type) return a.type === "delivery" ? -1 : 1;
     return a.createdAt - b.createdAt;
   });
 }
