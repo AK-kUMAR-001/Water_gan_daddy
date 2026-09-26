@@ -416,14 +416,8 @@ export function DeliveryForm({
       </Button>
 
       {!lockedCustomerId && (
-        <div className="pt-2">
-          <ExportExcel defaultCompanyId={customerId} />
-        </div>
-      )}
-
-      {!lockedCustomerId && (
         <div className="pt-4 border-t border-border space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-foreground">
               {!date
                 ? "Entries"
@@ -431,7 +425,10 @@ export function DeliveryForm({
                 ? `Today's Saved Entries (${shortDate(date)})`
                 : `Entries for ${shortDate(date)}`}
             </h3>
-            <span className="text-xs text-muted-foreground">{mergedRows.length} entries</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">{mergedRows.length} entries</span>
+              <ExportExcel dailyDate={date} />
+            </div>
           </div>
           {mergedRows.length > 0 ? (
             <div className="overflow-x-auto rounded-md border border-border bg-card">

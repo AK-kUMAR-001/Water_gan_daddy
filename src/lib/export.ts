@@ -217,3 +217,107 @@ export async function exportLedgerExcel(
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+export async function exportDailyEntriesExcel(data: Data, date: string) {
+  const ExcelJS = (await import("exceljs")).default;
+  const workbook = new ExcelJS.Workbook();
+  workbook.created = new Date();
+
+  const sheet = workbook.addWorksheet("Daily Entries");
+  sheet.columns = [
+    { width: 28 },
+    { width: 18 },
+    { width: 18 },
+    { width: 18 },
+    { width: 20 },
+    { width: 14 },
+  ];
+  const title = sheet.addRow([`Daily Entries — ${longDate(date)}`]);
+  title.font = { bold: true, size: 13 };
+  sheet.mergeCells(1, 1, 1, 6);
+  sheet.addRow([]);
+
+  const headers = ["Company", "Type", "Cans (in / out)", "Today Charge", "Amount Received", "Time"];
+  const header = sheet.addRow(headers);
+  header.eachCell((cell) => {
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFF0000" } };
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+  });
+
+  const transactions = data.txns
+    .filter((txn) => txn.date === date)
+    .sort((a, b) => b.createdAt - a.createdAt);
+  const pairedIds = new Set<string>();
+  const entries: { delivery?: Txn; payment?: Txn; sortAt: number }[] = [];
+
+  for (const txn of transactions) {
+    if (pairedIds.has(txn.id)) continue;
+    const pair = transactions.find(
+      (candidate) =>
+        !pairedIds.has(candidate.id) &&
+        candidate.id !== txn.id &&
+        candidate.customerId === txn.customerId &&
+        candidate.createdAt === txn.createdAt &&
+        candidate.type !== txn.type,
+    );
+    if (pair) {
+      pairedIds.add(txn.id);
+      pairedIds.add(pair.id);
+      entries.push({
+        delivery: txn.type === "delivery" ? txn : pair,
+        payment: txn.type === "payment" ? txn : pair,
+        sortAt: txn.createdAt,
+      });
+      continue;
+    }
+    pairedIds.add(txn.id);
+    entries.push({
+      ...(txn.type === "delivery" ? { delivery: txn } : { payment: txn }),
+      sortAt: txn.createdAt,
+    });
+  }
+
+  entries.sort((a, b) => b.sortAt - a.sortAt);
+  for (const entry of entries) {
+    const txn = entry.delivery ?? entry.payment;
+    if (!txn) continue;
+    const customer = data.customers.find((item) => item.id === txn.customerId);
+    const delivery = entry.delivery;
+    const payment = entry.payment;
+    const cansIn = delivery?.cans ?? 0;
+    const cansOut = delivery?.cansReturned ?? 0;
+    const type = !delivery
+      ? "Payment"
+      : cansIn === 0 && cansOut > 0
+        ? "Empty return"
+        : payment
+          ? "Delivery + Pay"
+          : "Delivery";
+    const cans = cansIn || cansOut ? `${cansIn} in${cansOut ? ` / ${cansOut} out` : ""}` : "—";
+    const row = sheet.addRow([
+      customer?.name ?? "—",
+      type,
+      cans,
+      delivery && type !== "Empty return" ? delivery.amount : "—",
+      payment?.amount ?? "—",
+      new Date(entry.sortAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
+    ]);
+    row.getCell(4).numFmt = "₹#,##0";
+    row.getCell(5).numFmt = "₹#,##0";
+  }
+
+  sheet.views = [{ state: "frozen", ySplit: 3 }];
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `water-can-daily-entries-${date}.xlsx`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

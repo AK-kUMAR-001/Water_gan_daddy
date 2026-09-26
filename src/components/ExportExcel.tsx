@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { exportLedgerExcel } from "@/lib/export";
+import { exportDailyEntriesExcel, exportLedgerExcel } from "@/lib/export";
 import { todayISO, useData } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -18,10 +18,12 @@ const ALL = "all";
 
 export function ExportExcel({
   defaultCompanyId,
+  dailyDate,
   className,
   hideCompanySelect = false,
 }: {
   defaultCompanyId?: string | null;
+  dailyDate?: string;
   className?: string;
   hideCompanySelect?: boolean;
 }) {
@@ -41,6 +43,23 @@ export function ExportExcel({
   }
 
   async function run() {
+    if (dailyDate !== undefined) {
+      if (!dailyDate) {
+        toast.error("Choose a date to export");
+        return;
+      }
+      setBusy(true);
+      try {
+        await exportDailyEntriesExcel(data, dailyDate);
+        toast.success(`Exported all entries for ${dailyDate}`);
+      } catch (e) {
+        console.error(e);
+        toast.error("Could not create the Excel file");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     if (!value) {
       toast.error("Please choose a company to export");
       return;
@@ -60,6 +79,21 @@ export function ExportExcel({
     } finally {
       setBusy(false);
     }
+  }
+
+  if (dailyDate !== undefined) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        className={cn("h-9 gap-2", className)}
+        disabled={busy || !dailyDate}
+        onClick={run}
+      >
+        <Download className="size-4" />
+        {busy ? "Preparing..." : "Export date"}
+      </Button>
+    );
   }
 
   if (hideCompanySelect) {
