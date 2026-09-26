@@ -66,20 +66,19 @@ let loaded = false;
 let dataGeneration = 0;
 const listeners = new Set<() => void>();
 
-async function currentOwnerId(): Promise<string> {
+async function requireSignedInUser() {
   if (!supabase) throw new Error("Supabase is not configured");
   const { data: sessionData, error } = await supabase.auth.getSession();
   if (error) throw error;
   if (!sessionData.session) throw new Error("Sign in before accessing account data");
-  return sessionData.session.user.id;
 }
 
-async function readSupabaseData(ownerId: string): Promise<Data> {
+async function readSupabaseData(): Promise<Data> {
   if (!supabase) return data;
   const [customersRes, txnsRes, expensesRes] = await Promise.all([
-    supabase.from("customers").select("*").eq("owner_id", ownerId).order("name", { ascending: true }),
-    supabase.from("transactions").select("*").eq("owner_id", ownerId).order("date", { ascending: true }),
-    supabase.from("expenses").select("*").eq("owner_id", ownerId).order("date", { ascending: true }),
+    supabase.from("customers").select("*").order("name", { ascending: true }),
+    supabase.from("transactions").select("*").order("date", { ascending: true }),
+    supabase.from("expenses").select("*").order("date", { ascending: true }),
   ]);
 
   if (customersRes.error) throw customersRes.error;
@@ -132,18 +131,17 @@ async function upsertSupabaseRow(
   row: Record<string, unknown>,
 ) {
   if (!supabase) return;
-  const ownerId = await currentOwnerId();
-  await upsertSupabaseRows(table, [row], ownerId);
+  await requireSignedInUser();
+  await upsertSupabaseRows(table, [row]);
 }
 
 async function upsertSupabaseRows(
   table: "customers" | "transactions" | "expenses",
   rows: Record<string, unknown>[],
-  ownerId: string,
 ) {
   if (!supabase) return;
   for (let offset = 0; offset < rows.length; offset += 100) {
-    const batch = rows.slice(offset, offset + 100).map((row) => ({ ...row, owner_id: ownerId }));
+    const batch = rows.slice(offset, offset + 100);
     const { error } = await supabase.from(table).upsert(batch, { onConflict: "id" });
     if (error) throw error;
   }
@@ -151,8 +149,8 @@ async function upsertSupabaseRows(
 
 async function deleteSupabaseRow(table: "transactions" | "expenses", id: string) {
   if (!supabase) return;
-  const ownerId = await currentOwnerId();
-  const { error } = await supabase.from(table).delete().eq("id", id).eq("owner_id", ownerId);
+  await requireSignedInUser();
+  const { error } = await supabase.from(table).delete().eq("id", id);
   if (error) throw error;
 }
 
@@ -180,9 +178,9 @@ function readLocalBackup(): Data {
   }
 }
 
-export function getLocalBackupSummary(ownerId: string) {
+export function getLocalBackupSummary() {
   if (typeof window === "undefined") return { customers: 0, txns: 0, expenses: 0 };
-  if (window.localStorage.getItem(`${KEY}-imported-${ownerId}`) === "true") {
+  if (window.localStorage.getItem(`${KEY}-imported-shared`) === "true") {
     return { customers: 0, txns: 0, expenses: 0 };
   }
   const backup = readLocalBackup();
@@ -195,9 +193,9 @@ export function getLocalBackupSummary(ownerId: string) {
 
 export async function importLocalBackup() {
   if (!supabase || typeof window === "undefined") throw new Error("Supabase is not available");
-  const ownerId = await currentOwnerId();
+  await requireSignedInUser();
   const backup = readLocalBackup();
-  const remote = await readSupabaseData(ownerId);
+  const remote = await readSupabaseData();
   const customerIdMap = new Map<string, string>();
   const customersToInsert: Customer[] = [];
 
@@ -253,11 +251,11 @@ export async function importLocalBackup() {
     expensesToInsert.push({ ...oldExpense, id: uid() });
   }
 
-  await upsertSupabaseRows("customers", customersToInsert, ownerId);
-  await upsertSupabaseRows("transactions", txnsToInsert, ownerId);
-  await upsertSupabaseRows("expenses", expensesToInsert, ownerId);
+  await upsertSupabaseRows("customers", customersToInsert);
+  await upsertSupabaseRows("transactions", txnsToInsert);
+  await upsertSupabaseRows("expenses", expensesToInsert);
   await reloadData();
-  window.localStorage.setItem(`${KEY}-imported-${ownerId}`, "true");
+  window.localStorage.setItem(`${KEY}-imported-shared`, "true");
 
   return {
     customers: customersToInsert.length,
@@ -269,8 +267,8 @@ export async function importLocalBackup() {
 export async function reloadData() {
   if (!supabase) throw new Error("Supabase is not configured");
   const generation = dataGeneration;
-  const ownerId = await currentOwnerId();
-  const freshData = await readSupabaseData(ownerId);
+  await requireSignedInUser();
+  const freshData = await readSupabaseData();
   if (generation !== dataGeneration) return;
   data = freshData;
   loaded = true;
@@ -290,8 +288,8 @@ function load() {
 
   if (supabase) {
     const generation = dataGeneration;
-    currentOwnerId()
-      .then((ownerId) => readSupabaseData(ownerId))
+    requireSignedInUser()
+      .then(() => readSupabaseData())
       .then((freshData) => {
         if (generation !== dataGeneration) return;
         data = freshData;

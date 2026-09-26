@@ -52,7 +52,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       try {
         await reloadData();
         if (active && version === requestVersion.current) {
-          setLocalBackup(getLocalBackupSummary(nextSession.user.id));
+          setLocalBackup(getLocalBackupSummary());
           setDataLoading(false);
         }
       } catch (err) {
@@ -116,7 +116,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     try {
       await reloadData();
       if (version === requestVersion.current) {
-        setLocalBackup(getLocalBackupSummary(session.user.id));
+        setLocalBackup(getLocalBackupSummary());
         setDataLoading(false);
       }
     } catch (err) {
@@ -133,7 +133,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     setFormError("");
     try {
       const imported = await importLocalBackup();
-      setLocalBackup(getLocalBackupSummary(session.user.id));
+      setLocalBackup(getLocalBackupSummary());
       setNotice(
         `Imported ${imported.customers} companies, ${imported.txns} entries, and ${imported.expenses} expenses.`,
       );
