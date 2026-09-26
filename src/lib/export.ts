@@ -294,12 +294,14 @@ export async function exportDailyEntriesExcel(data: Data, date: string) {
         : payment
           ? "Delivery + Pay"
           : "Delivery";
-    const cans = cansIn || cansOut ? `${cansIn} in${cansOut ? ` / ${cansOut} out` : ""}` : "—";
+    const cans = !delivery
+      ? "—"
+      : `${cansIn ? `${cansIn} in` : cansOut ? "" : "0"}${cansOut ? `${cansIn ? " / " : ""}${cansOut} out` : ""}`;
     const row = sheet.addRow([
       customer?.name ?? "—",
       type,
       cans,
-      delivery && type !== "Empty return" ? delivery.amount : "—",
+      delivery && type !== "Empty return" && delivery.amount > 0 ? delivery.amount : "—",
       payment?.amount ?? "—",
       new Date(entry.sortAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
     ]);

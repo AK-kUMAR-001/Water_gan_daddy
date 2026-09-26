@@ -398,7 +398,7 @@ function CustomerLedger() {
           <Button variant="outline" className="h-11" onClick={() => setMode("payment")}>
             + Add Payment
           </Button>
-          <ExportExcel defaultCompanyId={customer.id} hideCompanySelect />
+          <ExportExcel defaultCompanyId={customer.id} />
         </div>
       </div>
 

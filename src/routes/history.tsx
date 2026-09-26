@@ -105,7 +105,6 @@ function HistoryPage() {
         <h1 className="text-2xl font-semibold tracking-tight">History</h1>
         <ExportExcel
           defaultCompanyId={company === "all" ? null : company}
-          hideCompanySelect
         />
       </div>
 
