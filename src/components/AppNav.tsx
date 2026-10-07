@@ -1,6 +1,5 @@
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 const links = [
   { to: "/", label: "Daily Entry" },
@@ -20,31 +19,8 @@ export function AppNav({ onSignOut }: { onSignOut: () => void }) {
           </Link>
         </div>
 
-        <nav className="md:hidden">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="w-full">
-                Menu
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[160px]">
-              {links.map((l) => (
-                <DropdownMenuItem key={l.to} asChild>
-                  <Link
-                    to={l.to}
-                    activeOptions={{ exact: l.to === "/" }}
-                    activeProps={{ className: "font-medium bg-accent" }}
-                  >
-                    {l.label}
-                  </Link>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </nav>
-
-        <div className="flex items-center gap-2">
-          <nav className="-mx-1 hidden items-center gap-1 overflow-x-auto md:flex">
+        <div className="flex items-center gap-2 flex-wrap">
+          <nav className="flex items-center gap-1 overflow-x-auto flex-wrap">
             {links.map((l) => (
               <Link
                 key={l.to}
